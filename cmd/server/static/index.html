@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Multiboard Sync Service</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    button { margin-right: 0.5rem; padding: 0.5rem 0.75rem; }
+    ul { padding-left: 1.2rem; }
+    li { margin: 0.25rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Export</h1>
+  <button onclick="startExport('localhost')">Export Localhost</button>
+  <button onclick="startExport('dev')">Export Dev</button>
+
+  <h2>Jobs</h2>
+  <div id="jobs"></div>
+
+  <script>
+    async function startExport(db) {
+      try {
+        const res = await fetch('/api/sync/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ database: db })
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          alert('Failed: ' + t);
+          return;
+        }
+        const data = await res.json();
+        alert('Job queued: ' + data.jobId);
+        refreshJobs();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function refreshJobs() {
+      try {
+        const res = await fetch('/api/jobs');
+        const jobs = await res.json();
+        const el = document.getElementById('jobs');
+        el.innerHTML = '';
+        const list = document.createElement('ul');
+        jobs.forEach(j => {
+          const li = document.createElement('li');
+          li.textContent = `${j.id} [${j.database}] - ${j.status} - ${j.progress}%`;
+          list.appendChild(li);
+        });
+        el.appendChild(list);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    setInterval(refreshJobs, 2000);
+    refreshJobs();
+  </script>
+</body>
+</html>
