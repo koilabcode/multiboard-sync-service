@@ -69,9 +69,16 @@ See `SYNC_SERVICE_CONFIG.env.example` for all required configuration.
 
 ## Success Criteria
 
-- Handle 10GB+ databases without crashing
+- Handle 1-10GB databases without crashing
 - Stream data (never load all into memory)
 - Zero data corruption
 - Typesense updates automatically
 - Real-time progress display
 - Simple VPS deployment
+
+## IMPORTANT SAFETY RULE
+
+**NEVER copy to Supabase databases as destination during testing!**
+- Only copy FROM staging/production TO localhost for testing
+- Supabase databases should only be import destinations in production use
+- This prevents accidental data corruption during development

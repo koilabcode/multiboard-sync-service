@@ -6,7 +6,7 @@ The current database sync feature cannot run on Vercel because it uses shell com
 
 ## What to Build
 
-A simple Node.js service that:
+A Node.js service that:
 1. Syncs PostgreSQL databases between environments
 2. Updates Typesense search index after database sync
 3. Shows real-time progress
@@ -17,135 +17,149 @@ A simple Node.js service that:
 ### Core Functionality
 
 1. **Database Export**
-   - Connect to source PostgreSQL using `pg` library
-   - Stream data (don't load into memory)
-   - Generate SQL format (not CSV)
-   - Save to local file
+   - Connect to source PostgreSQL database
+   - Stream data table by table (never load all into memory)
+   - Generate SQL format output (not CSV)
+   - Handle large databases (10GB+)
+   - Save output to local filesystem
 
 2. **Database Import**
-   - Validate target database exists
-   - Create backup before import
-   - Execute SQL file
-   - Handle errors gracefully
+   - Validate target database connection
+   - Create automatic backup before import
+   - Execute SQL file in streaming fashion
+   - Support rollback on failure
+   - Provide clear error messages
 
 3. **Typesense Sync**
-   - Connect to Typesense after database sync
-   - Update collections: components, parts, attributes
-   - Verify sync completed
+   - Connect to Typesense after database sync completes
+   - Update these collections: components, parts, attributes
+   - Handle connection failures gracefully
+   - Verify sync was successful
 
 4. **Progress Tracking**
-   - WebSocket or Server-Sent Events
-   - Show current table being processed
+   - Implement real-time updates using WebSocket or Server-Sent Events
+   - Show which table is currently being processed
    - Display percentage complete
+   - Estimate time remaining
+   - Send updates to connected clients
 
-## Technology Stack
+## Architecture Guidelines
 
-```json
-{
-  "runtime": "Node.js 18+",
-  "framework": "Express",
-  "database": "pg (PostgreSQL client)",
-  "queue": "BullMQ + Redis",
-  "search": "typesense",
-  "realtime": "socket.io"
-}
-```
+### Technology Stack
+- Use Node.js 18 or higher
+- Use Express for HTTP server
+- Use pg library for PostgreSQL connections
+- Use BullMQ with Redis for job queue
+- Use Socket.io or SSE for real-time updates
+- Use Typesense JavaScript client
 
-## API Endpoints
+### API Design
+Create REST endpoints for:
+- Starting export jobs
+- Starting import jobs
+- Triggering Typesense sync
+- Getting job status
+- Streaming progress updates
+- Canceling running jobs
 
-```
-POST /api/sync/export     - Start database export
-POST /api/sync/import     - Start database import  
-POST /api/sync/typesense  - Sync search index
-GET  /api/jobs/:id        - Get job status
-GET  /api/jobs/:id/stream - Real-time progress (SSE)
-```
+### Database Connection Strategy
+- Use connection pooling
+- Set appropriate timeouts
+- Handle connection failures
+- Support multiple simultaneous connections
+- Never load entire result sets into memory
 
-## Deployment
+### Error Handling Requirements
+- Validate all inputs
+- Check database connectivity before operations
+- Create backups before destructive operations
+- Log all errors with context
+- Provide user-friendly error messages
+- Support graceful shutdown
+
+### Security Requirements
+- Store all credentials in environment variables
+- Never log sensitive information
+- Validate and sanitize all user inputs
+- Implement API key authentication
+- Limit concurrent operations
+- Set resource limits
+
+## Deployment Requirements
 
 ### VPS Setup
-```bash
-# Install Node.js 18+
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
+The service should run on a VPS with:
+- Minimum 4GB RAM
+- Ubuntu or Debian Linux
+- Node.js 18+ installed
+- Redis installed for job queue
+- PM2 for process management
+- Nginx for reverse proxy (optional)
 
-# Install PM2
-npm install -g pm2
+### Process Management
+Use PM2 to:
+- Keep the service running
+- Auto-restart on crashes
+- Monitor memory usage
+- Rotate logs
+- Support zero-downtime deployments
 
-# Install Redis
-sudo apt-get install redis-server
+### File Storage
+- Store SQL dumps in a dedicated directory
+- Implement automatic cleanup of old files
+- Set maximum storage limits
+- Compress files when possible
 
-# Clone and run
-git clone [repo]
-cd multiboard-sync-service
-npm install
-npm start
-```
+## Testing Requirements
 
-### PM2 Configuration
-```javascript
-// ecosystem.config.js
-module.exports = {
-  apps: [{
-    name: 'sync-service',
-    script: './src/server.js',
-    instances: 1,
-    max_memory_restart: '2G',
-    env: {
-      NODE_ENV: 'production'
-    }
-  }]
-}
-```
-
-## Database Connection
-
-Use connection pooling with the `pg` library:
-
-```javascript
-const { Pool } = require('pg');
-
-const sourcePool = new Pool({
-  connectionString: process.env.SOURCE_DATABASE_URL,
-  max: 5,
-  idleTimeoutMillis: 30000
-});
-
-// Stream data, never load all into memory
-const { QueryStream } = require('pg-query-stream');
-const stream = sourcePool.query(new QueryStream('SELECT * FROM "Part"'));
-```
-
-## Error Handling
-
-1. Always validate database connections before operations
-2. Create backups before destructive operations
-3. Log all errors with context
-4. Provide clear error messages to UI
-5. Support rollback on failure
-
-## Security
-
-1. Use environment variables for all credentials
-2. Never log sensitive data
-3. Validate all inputs
-4. Use connection pooling with timeouts
-5. Limit concurrent operations
-
-## Testing
-
-Test with:
-- Small database (< 100MB)
-- Medium database (1-5GB)  
+Test the service with:
+- Small test database (less than 100MB)
+- Medium database (1-5GB)
 - Large database (10GB+)
-- Network interruptions
-- Invalid credentials
+- Slow network connections
+- Database connection failures
+- Typesense connection failures
+- Concurrent operations
+- Important when testing only cp from Staging to localhost do not copy to any of the supabase databases as destination
+
+## Performance Requirements
+
+The service must:
+- Handle databases up to 1-10 GB
+- Use less than 2GB RAM during operations
+- Stream all data (no full loading)
+- Support multiple concurrent jobs
+- Complete 1GB sync in under 10 minutes
+- Recover from network interruptions
+
+## User Interface Requirements
+
+Create a simple web interface that:
+- Shows list of recent sync jobs
+- Displays real-time progress
+- Allows starting new sync jobs
+- Shows error messages clearly
+- Provides job history
+- Allows job cancellation
+
+## Configuration
+
+The service should be configurable via environment variables for:
+- Database connection strings
+- Typesense credentials
+- Redis connection
+- Port number
+- API authentication key
+- Resource limits
+- Feature flags
 
 ## Success Criteria
 
-- No memory issues with 10GB+ databases
-- Complete sync in reasonable time
-- Zero data loss
-- Automatic Typesense update
-- Clear progress indication
-- Works on basic VPS (4GB RAM)
+The service is complete when it:
+- Runs reliably on a VPS
+- Handles production database sizes
+- Never corrupts data
+- Provides clear progress indication
+- Updates Typesense automatically
+- Recovers from failures gracefully
+- Can be deployed with simple commands
