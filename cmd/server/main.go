@@ -44,6 +44,9 @@ func main() {
 	mux.HandleFunc("/api/databases", dbh.List)
 	mux.HandleFunc("/api/databases/test", dbh.Test)
 
+	fs := http.FileServer(http.Dir("cmd/server/static"))
+	mux.Handle("/", fs)
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: loggingMiddleware(mux),
