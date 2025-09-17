@@ -28,7 +28,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("asynq client error: %v", err)
 	}
-	defer client.Close()
 
 	worker, err := queue.NewWorker(cfg.RedisURL, jobs)
 	if err != nil {
@@ -87,6 +86,8 @@ func main() {
 		log.Printf("server shutdown error: %v", err)
 	}
 	worker.Shutdown()
-	_ = client.Close()
+	if err := client.Close(); err != nil {
+		log.Printf("Redis close error: %v", err)
+	}
 	_ = asynq.ErrServerClosed
 }

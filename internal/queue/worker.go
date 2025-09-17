@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
@@ -33,6 +34,25 @@ func NewWorker(redisURL string, jobs *models.JobStore) (*Worker, error) {
 	return w, nil
 }
 
+func (w *Worker) performExport(ctx context.Context, db string, jobID string) error {
+	if db == "staging" {
+		return errors.New("simulated export failure for staging")
+	}
+	for i := 1; i <= 10; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1 * time.Second):
+			prog := i * 10
+			w.jobs.Update(jobID, func(j *models.Job) {
+				j.Progress = prog
+			})
+			log.Printf("Job %s progress %d%%", jobID, prog)
+		}
+	}
+	return nil
+}
+
 func (w *Worker) handleExport(ctx context.Context, t *asynq.Task) error {
 	var p ExportTaskPayload
 	if err := json.Unmarshal(t.Payload(), &p); err != nil {
@@ -46,18 +66,15 @@ func (w *Worker) handleExport(ctx context.Context, t *asynq.Task) error {
 	})
 	log.Printf("Starting export for database %s (job %s)", p.Database, p.JobID)
 
-	for i := 1; i <= 10; i++ {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(1 * time.Second):
-			prog := i * 10
-			w.jobs.Update(p.JobID, func(j *models.Job) {
-				j.Progress = prog
-			})
-			log.Printf("Job %s progress %d%%", p.JobID, prog)
-		}
+	if err := w.performExport(ctx, p.Database, p.JobID); err != nil {
+		w.jobs.Update(p.JobID, func(j *models.Job) {
+			j.Status = models.StatusFailed
+			j.Error = err.Error()
+		})
+		log.Printf("Export failed for job %s: %v", p.JobID, err)
+		return err
 	}
+
 	done := time.Now()
 	w.jobs.Update(p.JobID, func(j *models.Job) {
 		j.Status = models.StatusCompleted

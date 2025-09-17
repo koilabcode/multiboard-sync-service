@@ -26,6 +26,16 @@ func (h *ExportHandler) StartExport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
+	validDBs := map[string]bool{
+		"localhost":  true,
+		"dev":        true,
+		"staging":    true,
+		"production": true,
+	}
+	if !validDBs[req.Database] {
+		http.Error(w, "Invalid database name", http.StatusBadRequest)
+		return
+	}
 	id := uuid.New().String()
 	h.Jobs.Create(&models.Job{
 		ID:       id,
