@@ -112,6 +112,8 @@ Use PM2 to:
 
 ## Testing Requirements
 
+**CRITICAL SAFETY RULE**: During development and testing, ONLY copy FROM staging/dev TO localhost. NEVER use Supabase databases as destination!
+
 Test the service with:
 - Small test database (less than 100MB)
 - Medium database (1-5GB)
@@ -120,7 +122,14 @@ Test the service with:
 - Database connection failures
 - Typesense connection failures
 - Concurrent operations
-- Important when testing only cp from Staging to localhost do not copy to any of the supabase databases as destination
+
+**Testing Database Rules:**
+- ✅ Source: Staging or Dev database (Supabase) 
+- ✅ Destination: Localhost database only
+- ❌ NEVER copy TO production database
+- ❌ NEVER copy TO staging database
+- ❌ NEVER copy TO dev database (Supabase)
+- ⚠️ Production operations only after thorough localhost testing
 
 ## Performance Requirements
 

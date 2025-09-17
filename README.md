@@ -22,9 +22,17 @@ Build a simple Node.js service that:
 ## For Devin
 
 1. Read `IMPLEMENTATION_PLAN.md` for technical details
-2. Copy `SYNC_SERVICE_CONFIG.env.example` to `.env` and add credentials
+2. The `.env` file is already configured with credentials (DO NOT COMMIT TO GIT)
 3. Build the service using Node.js and Express
 4. Deploy to a VPS with PM2
+
+## CRITICAL TESTING SAFETY RULES
+
+**During development and testing:**
+- ✅ ONLY copy FROM staging/dev TO localhost
+- ❌ NEVER copy TO production or staging databases  
+- ❌ NEVER use Supabase databases as destination during testing
+- ⚠️ Production sync should only be done after thorough testing on localhost
 
 ## Required Features
 
