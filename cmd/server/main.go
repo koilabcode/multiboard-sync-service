@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/koilabcode/multiboard-sync-service/internal/config"
+	"github.com/koilabcode/multiboard-sync-service/internal/database"
 	"github.com/koilabcode/multiboard-sync-service/internal/handlers"
 )
 
@@ -30,8 +31,18 @@ func main() {
 
 	log.Info().Msgf("Server starting on port %s", cfg.Port)
 
+	urls := database.LoadURLs()
+	mgr, err := database.NewManager(context.Background(), urls)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize database manager")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handlers.Health)
+
+	dbh := handlers.DatabasesHandler{Manager: mgr}
+	mux.HandleFunc("/api/databases", dbh.List)
+	mux.HandleFunc("/api/databases/test", dbh.Test)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
@@ -52,6 +63,8 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	mgr.Close()
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error().Err(err).Msg("graceful shutdown failed")
