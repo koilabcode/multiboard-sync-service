@@ -47,3 +47,5 @@ ecosystem.config.js
 # Temporary files
 tmp/
 temp/
+
+CLAUDE.md
