@@ -6,12 +6,14 @@ const (
 	DBNameProduction = "production"
 	DBNameStaging    = "staging"
 	DBNameDev        = "dev"
+	DBNameLocalhost  = "localhost"
 )
 
 type URLs struct {
 	Production string
 	Staging    string
 	Dev        string
+	Localhost  string
 }
 
 func LoadURLs() URLs {
@@ -19,11 +21,12 @@ func LoadURLs() URLs {
 		Production: os.Getenv("PRODUCTION_DATABASE_URL"),
 		Staging:    os.Getenv("STAGING_DATABASE_URL"),
 		Dev:        os.Getenv("DEV_DATABASE_URL"),
+		Localhost:  os.Getenv("LOCALHOST_DATABASE_URL"),
 	}
 }
 
 func (u URLs) ListConfigured() []string {
-	out := make([]string, 0, 3)
+	out := make([]string, 0, 4)
 	if u.Production != "" {
 		out = append(out, DBNameProduction)
 	}
@@ -32,6 +35,9 @@ func (u URLs) ListConfigured() []string {
 	}
 	if u.Dev != "" {
 		out = append(out, DBNameDev)
+	}
+	if u.Localhost != "" {
+		out = append(out, DBNameLocalhost)
 	}
 	return out
 }
@@ -53,6 +59,11 @@ func (u URLs) Get(name string) (string, bool) {
 			return "", false
 		}
 		return u.Dev, true
+	case DBNameLocalhost:
+		if u.Localhost == "" {
+			return "", false
+		}
+		return u.Localhost, true
 	default:
 		return "", false
 	}
