@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multiboard Sync Service</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; }
+        .success { color: green; }
+        .error { color: red; }
+        .database { border: 1px solid #ddd; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Multiboard Database Sync Service</h1>
+
+    <div>
+        <button onclick="listDatabases()">List Databases</button>
+        <button onclick="testConnection('production')">Test Production</button>
+        <button onclick="testConnection('staging')">Test Staging</button>
+        <button onclick="testConnection('dev')">Test Dev</button>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        async function listDatabases() {
+            const resp = await fetch('/api/databases');
+            const data = await resp.json();
+            document.getElementById('results').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        }
+
+        async function testConnection(db) {
+            const resp = await fetch('/api/databases/test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({database: db})
+            });
+            const data = await resp.json();
+            document.getElementById('results').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        }
+    </script>
+</body>
+</html>
