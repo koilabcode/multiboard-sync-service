@@ -12,7 +12,7 @@ Build a standalone service that syncs PostgreSQL databases for Multiboard.
 
 ## Solution
 
-Build a simple Node.js service that:
+Build a simple Go service that:
 - Exports/imports PostgreSQL databases using streaming
 - Shows real-time progress
 - Runs on a VPS (not Vercel)
@@ -49,19 +49,19 @@ Build a simple Node.js service that:
 
 ## Tech Stack
 
-- Node.js 18+
-- Express
-- PostgreSQL (`pg` library)
-- Redis + BullMQ (job queue)
-- Socket.io (real-time updates)
+- Go 1.21+
+- Standard net/http or Gin
+- PostgreSQL (`pgx/v5` library)
+- Redis + Asynq (job queue)
+- Gorilla WebSocket (real-time updates)
 
 ## Deployment
 
 Deploy to a VPS with:
 - 4GB RAM minimum
-- Node.js 18+
+- Go 1.21+ (or deploy compiled binary)
 - Redis
-- PM2 for process management
+- Systemd for process management
 
 No Docker needed - just run directly with PM2.
 

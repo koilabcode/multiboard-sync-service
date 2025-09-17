@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Node.js service for syncing PostgreSQL databases for Multiboard. It's designed to run on a VPS (not Vercel) and handle large databases through streaming operations.
+This is a Go service for syncing PostgreSQL databases for Multiboard. It's designed to run on a VPS (not Vercel) and handle large databases through streaming operations with excellent memory efficiency and native concurrency.
 
 ## Critical Safety Rules
 
@@ -23,54 +23,79 @@ The `reference/` directory contains the current broken implementation. Avoid the
 - CSV format with COPY commands - causes data corruption
 
 ### Required Approach
-- Use `pg` library for native PostgreSQL connections
-- Stream all data (never load full tables into memory)
+- Use `pgx/v5` library for native PostgreSQL connections with superior performance
+- Stream all data using Go's efficient I/O (never load full tables into memory)
 - Generate proper SQL dumps (not CSV)
-- Use BullMQ with Redis for job queuing
-- Use Socket.io or SSE for real-time progress updates
+- Use Asynq with Redis for job queuing
+- Use gorilla/websocket or SSE for real-time progress updates
+- Leverage goroutines for concurrent table exports
 
 ## Development Setup
 
-Since the project doesn't have a package.json yet, initialize with:
+Initialize the Go module:
 ```bash
-npm init -y
-npm install express pg bullmq socket.io redis ioredis dotenv
-npm install --save-dev @types/node @types/express nodemon typescript
+go mod init github.com/koilabcode/multiboard-sync-service
+go get github.com/jackc/pgx/v5
+go get github.com/hibiken/asynq
+go get github.com/gorilla/websocket
+go get github.com/joho/godotenv
+go get github.com/rs/zerolog
 ```
 
 ## Common Commands
 
 ### Local Development
 ```bash
-npm run dev        # Run with nodemon (after setup)
-node src/server.js # Run directly
+go run cmd/server/main.go  # Run directly
+go build -o sync-service cmd/server/main.go  # Build binary
+air  # Hot reload with Air (optional)
 ```
 
 ### Production Deployment
 ```bash
-pm2 start src/server.js --name sync-service
-pm2 restart sync-service
-pm2 logs sync-service
+go build -o sync-service cmd/server/main.go
+sudo systemctl start sync-service
+sudo systemctl restart sync-service
+journalctl -u sync-service -f  # View logs
 ```
 
 ## Core Components Architecture
 
-### Database Operations (`src/services/database.js`)
-- Export: Stream tables using cursor-based queries with `pg` library
-- Import: Execute SQL files in streaming fashion with transaction support
-- Backup: Create automatic backups before destructive operations
-- Never use `psql` shell commands or load entire result sets into memory
+### Database Operations (`internal/database/`)
+- Export: Stream tables using pgx/v5 CopyFrom for maximum performance
+- Import: Execute SQL files using streaming with proper transaction boundaries
+- Backup: Create automatic backups using pg_dump equivalent in Go
+- Use connection pools and prepared statements
+- Leverage goroutines for parallel table processing
 
-### Job Queue (`src/services/queue.js`)
-- Use BullMQ with Redis for managing sync jobs
-- Track job progress and status
-- Support job cancellation and retries
-- Maintain job history
+### Job Queue (`internal/queue/`)
+- Use Asynq with Redis for distributed job processing
+- Track job progress using Redis keys
+- Support job cancellation via context
+- Maintain job history with TTL
 
-### Real-time Updates (`src/services/websocket.js`)
-- Implement Socket.io or Server-Sent Events
+### Real-time Updates (`internal/websocket/`)
+- Implement gorilla/websocket or Server-Sent Events
+- Use channels for broadcasting updates to multiple clients
 - Send progress updates for: current table, percentage complete, estimated time
-- Handle client reconnections gracefully
+- Handle client reconnections with goroutine management
+
+## Project Structure
+
+```
+cmd/
+  server/
+    main.go         # Main entry point
+internal/
+  database/         # Database operations
+  queue/            # Job queue management
+  websocket/        # Real-time updates
+  handlers/         # HTTP handlers
+  config/           # Configuration
+pkg/
+  models/           # Shared data models
+migrations/         # Database migrations
+```
 
 ## API Endpoints Structure
 
@@ -79,7 +104,7 @@ pm2 logs sync-service
 - `GET /api/jobs/:id` - Get job status
 - `GET /api/jobs` - List recent jobs
 - `DELETE /api/jobs/:id` - Cancel running job
-- WebSocket at `/socket.io` for real-time updates
+- WebSocket at `/ws` for real-time updates
 
 ## Environment Configuration
 
@@ -92,10 +117,10 @@ The `.env` file contains all credentials (DO NOT COMMIT). Key variables:
 ## Performance Requirements
 
 - Handle 1-10GB databases without crashes
-- Use less than 2GB RAM during operations
-- Stream all data operations
-- Support multiple concurrent jobs
-- Complete 1GB sync in under 10 minutes
+- Use less than 500MB RAM during operations (Go's efficiency)
+- Stream all data operations with minimal allocations
+- Support multiple concurrent jobs with goroutines
+- Complete 1GB sync in under 5 minutes (Go's superior performance)
 
 ## Testing Strategy
 
@@ -104,6 +129,12 @@ Test with progressively larger databases:
 2. Medium database (1-5GB) from staging to localhost
 3. Large database (10GB+) stress testing
 4. Network failure recovery testing
-5. Concurrent operations testing
+5. Concurrent operations testing with race detector (`go test -race`)
+
+Benchmarking:
+```bash
+go test -bench=. ./...
+go test -benchmem -bench=. ./...  # Include memory allocations
+```
 
 Remember: During testing, only sync FROM staging/dev TO localhost, never the reverse.
