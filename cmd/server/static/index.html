@@ -4,21 +4,53 @@
   <meta charset="utf-8" />
   <title>Multiboard Sync Service</title>
   <style>
-    body { font-family: sans-serif; margin: 2rem; }
-    button { margin-right: 0.5rem; padding: 0.5rem 0.75rem; }
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; }
+    button { padding: 10px 16px; margin: 6px; cursor: pointer; }
     ul { padding-left: 1.2rem; }
     li { margin: 0.25rem 0; }
+    .section { margin-bottom: 28px; }
+    pre { background: #f6f8fa; padding: 12px; border-radius: 6px; }
   </style>
 </head>
 <body>
-  <h1>Export</h1>
-  <button onclick="startExport('localhost')">Export Localhost</button>
-  <button onclick="startExport('dev')">Export Dev</button>
+  <h1>Multiboard Database Sync Service</h1>
 
-  <h2>Jobs</h2>
-  <div id="jobs"></div>
+  <div class="section">
+    <h2>Database Utilities</h2>
+    <button onclick="listDatabases()">List Databases</button>
+    <button onclick="testConnection('production')">Test Production</button>
+    <button onclick="testConnection('staging')">Test Staging</button>
+    <button onclick="testConnection('dev')">Test Dev</button>
+    <button onclick="testConnection('localhost')">Test Localhost</button>
+    <div id="results"></div>
+  </div>
+
+  <div class="section">
+    <h2>Export</h2>
+    <button onclick="startExport('localhost')">Export Localhost</button>
+    <button onclick="startExport('dev')">Export Dev</button>
+
+    <h3>Jobs</h3>
+    <div id="jobs"></div>
+  </div>
 
   <script>
+    async function listDatabases() {
+      const resp = await fetch('/api/databases');
+      const data = await resp.json();
+      document.getElementById('results').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    }
+
+    async function testConnection(db) {
+      const resp = await fetch('/api/databases/test', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({database: db})
+      });
+      const data = await resp.json();
+      document.getElementById('results').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    }
+
     async function startExport(db) {
       try {
         const res = await fetch('/api/sync/export', {

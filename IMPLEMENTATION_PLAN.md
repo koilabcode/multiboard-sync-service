@@ -6,7 +6,7 @@ The current database sync feature cannot run on Vercel because it uses shell com
 
 ## What to Build
 
-A Node.js service that:
+A Go service that:
 1. Syncs PostgreSQL databases between environments
 2. Shows real-time progress of sync operations
 3. Runs on a VPS (Hetzner/DigitalOcean/Linode)
@@ -19,15 +19,15 @@ A Node.js service that:
 **Goal**: Create the basic service structure and job processing system
 
 **Steps**:
-1. Initialize Node.js project with Express server
-2. Set up basic folder structure (src/, routes/, services/, config/)
-3. Create health check endpoint to verify server is running
+1. Initialize Go module and project structure
+2. Set up basic folder structure (cmd/, internal/, pkg/, config/)
+3. Create HTTP server with health check endpoint
 4. Implement Redis connection for job queue
-5. Set up BullMQ job processor skeleton
-6. Add basic error handling middleware
+5. Set up Asynq job processor skeleton
+6. Add basic error handling and logging
 
 **Deliverables**:
-- Express server running on configured port
+- Go HTTP server running on configured port
 - `/health` endpoint returning 200 OK
 - Redis connected and job queue initialized
 - Basic job can be added and processed (test job)
@@ -36,7 +36,7 @@ A Node.js service that:
 **Goal**: Establish reliable connections to all database environments
 
 **Steps**:
-1. Create database connection manager using `pg` library
+1. Create database connection manager using `pgx/v5` library
 2. Implement connection pooling for each database
 3. Build connection validation functions
 4. Create endpoint to test database connections
@@ -89,9 +89,9 @@ A Node.js service that:
 **Goal**: Provide real-time feedback on sync operations
 
 **Steps**:
-1. Implement WebSocket server (Socket.io) or SSE
+1. Implement WebSocket server using gorilla/websocket or SSE
 2. Create progress calculation for exports/imports
-3. Build client connection management
+3. Build client connection management with goroutines
 4. Add detailed status messages (current table, rows processed)
 5. Implement time estimation algorithm
 6. Create job history storage
@@ -127,16 +127,16 @@ A Node.js service that:
 **Steps**:
 1. Add comprehensive error handling
 2. Implement file cleanup for old dumps
-3. Create PM2 ecosystem configuration
-4. Add resource usage monitoring
-5. Implement API key authentication
-6. Set up logging with rotation
+3. Create systemd service configuration
+4. Add resource usage monitoring with pprof
+5. Implement API key authentication middleware
+6. Set up structured logging with zerolog
 
 **Deliverables**:
-- PM2 configuration file
+- Systemd service file
 - Authenticated API endpoints
 - Automatic cleanup of old files
-- Comprehensive error logs
+- Structured JSON logs
 - Resource limits enforced
 - Deployment documentation
 
@@ -168,11 +168,11 @@ A Node.js service that:
 ## Architecture Guidelines
 
 ### Technology Stack
-- Use Node.js 18 or higher
-- Use Express for HTTP server
-- Use pg library for PostgreSQL connections
-- Use BullMQ with Redis for job queue
-- Use Socket.io or SSE for real-time updates
+- Use Go 1.21 or higher
+- Use standard net/http or Gin for HTTP server
+- Use pgx/v5 for PostgreSQL connections
+- Use Asynq with Redis for job queue
+- Use gorilla/websocket or SSE for real-time updates
 
 ### API Design
 Create REST endpoints for:
@@ -211,18 +211,18 @@ Create REST endpoints for:
 The service should run on a VPS with:
 - Minimum 4GB RAM
 - Ubuntu or Debian Linux
-- Node.js 18+ installed
+- Go 1.21+ installed (or deploy compiled binary)
 - Redis installed for job queue
-- PM2 for process management
+- Systemd for process management
 - Nginx for reverse proxy (optional)
 
 ### Process Management
-Use PM2 to:
+Use systemd to:
 - Keep the service running
 - Auto-restart on crashes
 - Monitor memory usage
-- Rotate logs
-- Support zero-downtime deployments
+- Handle log output
+- Support graceful restarts
 
 ### File Storage
 - Store SQL dumps in a dedicated directory

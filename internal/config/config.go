@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 )
 
 type Config struct {
+	Port     string
+	LogLevel string
 	RedisURL string
-	Port     int
 }
 
 func getenv(key, def string) string {
@@ -19,19 +19,17 @@ func getenv(key, def string) string {
 	return def
 }
 
-func Load() (*Config, error) {
+func Load() Config {
+	port := getenv("PORT", "8080")
+	logLevel := getenv("LOG_LEVEL", "info")
 	redisURL := getenv("REDIS_URL", "redis://127.0.0.1:6379")
 	if _, err := url.Parse(redisURL); err != nil {
-		return nil, fmt.Errorf("invalid REDIS_URL: %w", err)
+		redisURL = "redis://127.0.0.1:6379"
+		_ = fmt.Errorf("invalid REDIS_URL; defaulting to %s", redisURL)
 	}
-	port := 8080
-	if v := os.Getenv("PORT"); v != "" {
-		if p, err := strconv.Atoi(v); err == nil && p > 0 {
-			port = p
-		}
-	}
-	return &Config{
-		RedisURL: redisURL,
+	return Config{
 		Port:     port,
-	}, nil
+		LogLevel: logLevel,
+		RedisURL: redisURL,
+	}
 }
