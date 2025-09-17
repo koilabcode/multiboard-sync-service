@@ -25,6 +25,46 @@ Build a simple Node.js service that:
 4. Build the service using Node.js and Express
 5. Deploy to a VPS with PM2
 
+## Phase 1 (delivered in this PR)
+
+- TypeScript + Express scaffold
+- Health endpoints:
+  - GET `/health` → 200 `{ ok: true }`
+  - GET `/ready` → 200 when Redis is reachable; 503 otherwise
+- Redis connection (ioredis) and BullMQ queue/worker skeleton
+- Logging (pino) with secret redaction
+- Minimal test job endpoint:
+  - POST `/jobs/test` → enqueues a small test job and returns `{ id }`
+
+### Run locally
+
+Prereqs:
+- Node.js 18+
+- Redis running locally (e.g., `redis-server` or `docker run -p 6379:6379 redis:7`)
+
+Setup:
+- Copy `.env.example` to `.env` and set at least:
+  ```
+  REDIS_URL=redis://localhost:6379
+  PORT=8080
+  NODE_ENV=development
+  LOG_LEVEL=debug
+  ```
+- Install deps:
+  ```
+  nvm install 18 && nvm use 18
+  npm i
+  ```
+
+Start:
+- Dev mode: `npm run start:dev`
+- Watch mode: `npm run dev`
+
+Verify:
+- `curl http://localhost:8080/health` → `{"ok":true}`
+- `curl http://localhost:8080/ready` → `{"ok":true,"checks":{"redis":true}}` (requires Redis)
+- `curl -X POST http://localhost:8080/jobs/test` → `{"id":"<jobId>"}` and logs should show the worker processing the job
+
 ## CRITICAL TESTING SAFETY RULES
 
 **During development and testing:**
@@ -33,14 +73,13 @@ Build a simple Node.js service that:
 - ❌ NEVER use Supabase databases as destination during testing
 - ⚠️ Production sync should only be done after thorough testing on localhost
 
-## Required Features
+## Required Features (next phases)
 
 ### Database Operations
 - Export database to SQL file (streaming, not in memory)
 - Import SQL file to target database
 - Validate schemas before import
 - Create backups before changes
-
 
 ### Progress Tracking
 - Real-time updates via WebSocket or SSE
@@ -67,7 +106,7 @@ No Docker needed - just run directly with PM2.
 
 ## Environment Variables
 
-See `SYNC_SERVICE_CONFIG.env.example` for all required configuration.
+See `.env.example` for all required configuration.
 
 ## Success Criteria
 
