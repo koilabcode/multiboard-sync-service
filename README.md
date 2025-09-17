@@ -22,9 +22,10 @@ Build a simple Node.js service that:
 ## For Devin
 
 1. Read `IMPLEMENTATION_PLAN.md` for technical details
-2. The `.env` file is already configured with credentials (DO NOT COMMIT TO GIT)
-3. Build the service using Node.js and Express
-4. Deploy to a VPS with PM2
+2. **IMPORTANT**: Check `reference/` directory to see the BROKEN implementation - learn what NOT to do
+3. The `.env` file is already configured with credentials (DO NOT COMMIT TO GIT)
+4. Build the service using Node.js and Express
+5. Deploy to a VPS with PM2
 
 ## CRITICAL TESTING SAFETY RULES
 

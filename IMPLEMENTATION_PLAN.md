@@ -12,6 +12,8 @@ A Node.js service that:
 3. Shows real-time progress
 4. Runs on a VPS (Hetzner/DigitalOcean/Linode)
 
+**IMPORTANT**: Check the `reference/` directory to see the current BROKEN implementation. This shows what NOT to do - avoid using shell commands, CSV format, and loading data into memory.
+
 ## Technical Requirements
 
 ### Core Functionality
