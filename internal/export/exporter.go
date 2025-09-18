@@ -69,7 +69,7 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 			filtered = append(filtered, t)
 		}
 	}
-	slices.Sort(filtered)
+	sort.Strings(filtered)
 
 	total := len(filtered)
 	for i, tbl := range filtered {
@@ -324,10 +324,30 @@ func literal(v any) string {
 	case time.Time:
 		return "'" + t.UTC().Format(time.RFC3339Nano) + "'"
 	case pgtype.Numeric:
-		if t.NaN() {
+		if t.NaN {
 			return "NULL"
 		}
-		return t.String()
+		intStr := t.Int.String()
+		exp := int(t.Exp)
+		neg := strings.HasPrefix(intStr, "-")
+		if neg {
+			intStr = intStr[1:]
+		}
+		var out string
+		if exp >= 0 {
+			out = intStr + strings.Repeat("0", exp)
+		} else {
+			pointPos := len(intStr) + exp
+			if pointPos > 0 {
+				out = intStr[:pointPos] + "." + intStr[pointPos:]
+			} else {
+				out = "0." + strings.Repeat("0", -pointPos) + intStr
+			}
+		}
+		if neg && out != "0" {
+			out = "-" + out
+		}
+		return out
 	default:
 		switch x := t.(type) {
 		case sql.NullString:
