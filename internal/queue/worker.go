@@ -3,21 +3,26 @@ package queue
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/koilabcode/multiboard-sync-service/internal/database"
+	"github.com/koilabcode/multiboard-sync-service/internal/export"
 	"github.com/koilabcode/multiboard-sync-service/internal/models"
 )
 
 type Worker struct {
-	server *asynq.Server
-	mux    *asynq.ServeMux
-	jobs   *models.JobStore
+	server   *asynq.Server
+	mux      *asynq.ServeMux
+	jobs     *models.JobStore
+	mgr      *database.Manager
+	exporter *export.Exporter
 }
 
-func NewWorker(redisURL string, jobs *models.JobStore) (*Worker, error) {
+func NewWorker(redisURL string, jobs *models.JobStore, mgr *database.Manager) (*Worker, error) {
 	opt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		return nil, err
@@ -29,27 +34,42 @@ func NewWorker(redisURL string, jobs *models.JobStore) (*Worker, error) {
 		},
 	})
 	mux := asynq.NewServeMux()
-	w := &Worker{server: srv, mux: mux, jobs: jobs}
+	w := &Worker{server: srv, mux: mux, jobs: jobs, mgr: mgr}
+	w.exporter = export.New(mgr)
 	mux.HandleFunc(TypeExport, w.handleExport)
 	return w, nil
 }
 
 func (w *Worker) performExport(ctx context.Context, db string, jobID string) error {
-	if db == "staging" {
-		return errors.New("simulated export failure for staging")
+	if err := os.MkdirAll("dumps", 0o755); err != nil {
+		return err
 	}
-	for i := 1; i <= 10; i++ {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(1 * time.Second):
-			prog := i * 10
-			w.jobs.Update(jobID, func(j *models.Job) {
-				j.Progress = prog
-			})
-			log.Printf("Job %s progress %d%%", jobID, prog)
+	filename := fmt.Sprintf("dumps/%s_%s.sql", db, time.Now().Format("20060102_150405"))
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	progFn := func(current, total int, table string, rows int64) {
+		pct := int((float64(current) / float64(total)) * 100.0)
+		if pct > 100 {
+			pct = 100
 		}
+		w.jobs.Update(jobID, func(j *models.Job) {
+			j.Progress = pct
+			j.CurrentTable = table
+			j.RowsExported = rows
+		})
 	}
+
+	_, _ = f.WriteString(fmt.Sprintf("-- Export started at %s\n\n", time.Now().UTC().Format(time.RFC3339)))
+	if err := w.exporter.Export(ctx, db, f, progFn); err != nil {
+		return err
+	}
+	w.jobs.Update(jobID, func(j *models.Job) {
+		j.Progress = 100
+	})
 	return nil
 }
 
