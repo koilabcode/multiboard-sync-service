@@ -44,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("asynq client error")
 	}
-	worker, err := queue.NewWorker(cfg.RedisURL, jobs)
+	worker, err := queue.NewWorker(cfg.RedisURL, jobs, mgr)
 	if err != nil {
 		log.Fatal().Err(err).Msg("asynq worker error")
 	}

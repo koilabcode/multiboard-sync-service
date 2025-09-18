@@ -15,13 +15,15 @@ const (
 )
 
 type Job struct {
-	ID          string     `json:"id"`
-	Database    string     `json:"database"`
-	Status      JobStatus  `json:"status"`
-	Progress    int        `json:"progress"`
-	StartedAt   *time.Time `json:"startedAt,omitempty"`
-	CompletedAt *time.Time `json:"completedAt,omitempty"`
-	Error       string     `json:"error,omitempty"`
+	ID           string     `json:"id"`
+	Database     string     `json:"database"`
+	Status       JobStatus  `json:"status"`
+	Progress     int        `json:"progress"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+	CompletedAt  *time.Time `json:"completedAt,omitempty"`
+	Error        string     `json:"error,omitempty"`
+	CurrentTable string     `json:"currentTable,omitempty"`
+	RowsExported int64      `json:"rowsExported,omitempty"`
 }
 
 type JobStore struct {

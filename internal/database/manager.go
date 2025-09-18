@@ -118,3 +118,7 @@ func (m *Manager) Close() {
 		}
 	}
 }
+
+func (m *Manager) Pool(ctx context.Context, name string) (*pgxpool.Pool, error) {
+	return m.getOrCreatePool(ctx, name)
+}
