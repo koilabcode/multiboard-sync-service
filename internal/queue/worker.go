@@ -1,11 +1,14 @@
 package queue
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -37,6 +40,7 @@ func NewWorker(redisURL string, jobs *models.JobStore, mgr *database.Manager) (*
 	w := &Worker{server: srv, mux: mux, jobs: jobs, mgr: mgr}
 	w.exporter = export.New(mgr)
 	mux.HandleFunc(TypeExport, w.handleExport)
+	mux.HandleFunc(TypeImport, w.handleImport)
 	return w, nil
 }
 
@@ -102,6 +106,114 @@ func (w *Worker) handleExport(ctx context.Context, t *asynq.Task) error {
 		j.Progress = 100
 	})
 	log.Printf("Completed export for job %s", p.JobID)
+	return nil
+}
+
+func (w *Worker) performImport(ctx context.Context, target, jobID, dumpPath string, dumpSize int64) error {
+	pool, err := w.mgr.Pool(ctx, target)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(dumpPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	reader := bufio.NewReaderSize(f, 1024*256)
+	var (
+		stmtBuf     strings.Builder
+		totalRead   int64
+		lastUpdated time.Time
+	)
+
+	updateProgress := func() {
+		if dumpSize <= 0 {
+			return
+		}
+		pct := int((float64(totalRead) / float64(dumpSize)) * 100.0)
+		if pct > 100 {
+			pct = 100
+		}
+		w.jobs.Update(jobID, func(j *models.Job) {
+			j.Progress = pct
+		})
+	}
+
+	for {
+		chunk, err := reader.ReadString('\n')
+		if len(chunk) > 0 {
+			totalRead += int64(len(chunk))
+			lineTrim := strings.TrimSpace(chunk)
+			if strings.HasPrefix(lineTrim, "--") {
+				if time.Since(lastUpdated) > 500*time.Millisecond {
+					updateProgress()
+					lastUpdated = time.Now()
+				}
+				continue
+			}
+			stmtBuf.WriteString(chunk)
+			if strings.HasSuffix(strings.TrimSpace(chunk), ";") {
+				stmt := strings.TrimSpace(stmtBuf.String())
+				stmtBuf.Reset()
+				if stmt != "" {
+					if _, errExec := pool.Exec(ctx, stmt); errExec != nil {
+						return fmt.Errorf("exec failed: %w", errExec)
+					}
+				}
+			}
+			if time.Since(lastUpdated) > 500*time.Millisecond {
+				updateProgress()
+				lastUpdated = time.Now()
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+	}
+	if s := strings.TrimSpace(stmtBuf.String()); s != "" {
+		if _, err := pool.Exec(ctx, s); err != nil {
+			return fmt.Errorf("exec failed: %w", err)
+		}
+	}
+	w.jobs.Update(jobID, func(j *models.Job) {
+		j.Progress = 100
+	})
+	return nil
+}
+
+func (w *Worker) handleImport(ctx context.Context, t *asynq.Task) error {
+	var p ImportTaskPayload
+	if err := json.Unmarshal(t.Payload(), &p); err != nil {
+		return err
+	}
+	now := time.Now()
+	w.jobs.Update(p.JobID, func(j *models.Job) {
+		j.Status = models.StatusRunning
+		j.StartedAt = &now
+		j.Progress = 0
+	})
+	log.Printf("Starting import from %s (%s) into %s (job %s)", p.Source, p.DumpPath, p.Target, p.JobID)
+
+	if err := w.performImport(ctx, p.Target, p.JobID, p.DumpPath, p.DumpSize); err != nil {
+		w.jobs.Update(p.JobID, func(j *models.Job) {
+			j.Status = models.StatusFailed
+			j.Error = err.Error()
+		})
+		log.Printf("Import failed for job %s: %v", p.JobID, err)
+		return err
+	}
+
+	done := time.Now()
+	w.jobs.Update(p.JobID, func(j *models.Job) {
+		j.Status = models.StatusCompleted
+		j.CompletedAt = &done
+		j.Progress = 100
+	})
+	log.Printf("Completed import for job %s", p.JobID)
 	return nil
 }
 
