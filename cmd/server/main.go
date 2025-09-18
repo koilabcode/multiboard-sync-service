@@ -15,6 +15,8 @@ import (
 	"github.com/koilabcode/multiboard-sync-service/internal/config"
 	"github.com/koilabcode/multiboard-sync-service/internal/database"
 	"github.com/koilabcode/multiboard-sync-service/internal/handlers"
+	"github.com/koilabcode/multiboard-sync-service/internal/models"
+	"github.com/koilabcode/multiboard-sync-service/internal/queue"
 )
 
 func main() {
@@ -37,12 +39,46 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to initialize database manager")
 	}
 
+	jobs := models.NewJobStore()
+	client, err := queue.NewClient(cfg.RedisURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("asynq client error")
+	}
+	worker, err := queue.NewWorker(cfg.RedisURL, jobs)
+	if err != nil {
+		log.Fatal().Err(err).Msg("asynq worker error")
+	}
+	_ = worker.Start
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handlers.Health)
 
 	dbh := handlers.DatabasesHandler{Manager: mgr}
 	mux.HandleFunc("/api/databases", dbh.List)
 	mux.HandleFunc("/api/databases/test", dbh.Test)
+
+	eh := &handlers.ExportHandler{Jobs: jobs, Client: client}
+	mux.HandleFunc("/api/sync/export", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		eh.StartExport(w, r)
+	})
+	mux.HandleFunc("/api/jobs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		eh.ListJobs(w, r)
+	})
+	mux.HandleFunc("/api/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		eh.GetJob(w, r)
+	})
 
 	fs := http.FileServer(http.Dir("cmd/server/static"))
 	mux.Handle("/", fs)
@@ -51,6 +87,8 @@ func main() {
 		Addr:    ":" + cfg.Port,
 		Handler: loggingMiddleware(mux),
 	}
+
+	worker.Start()
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -68,6 +106,10 @@ func main() {
 	defer cancel()
 
 	mgr.Close()
+	worker.Shutdown()
+	if err := client.Close(); err != nil {
+		log.Error().Err(err).Msg("Redis close error")
+	}
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error().Err(err).Msg("graceful shutdown failed")
