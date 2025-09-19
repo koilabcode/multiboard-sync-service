@@ -1,0 +1,32 @@
+[Unit]
+Description=Multiboard Sync Service
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=multiboard
+Group=multiboard
+WorkingDirectory=/opt/multiboard-sync-service
+EnvironmentFile=/opt/multiboard-sync-service/.env
+ExecStart=/opt/multiboard-sync-service/bin/multiboard-sync-service
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/multiboard-sync-service /var/log/multiboard-sync-service
+CapabilityBoundingSet=
+AmbientCapabilities=
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+StandardOutput=append:/var/log/multiboard-sync-service/service.log
+StandardError=append:/var/log/multiboard-sync-service/service.err
+
+[Install]
+WantedBy=multi-user.target
