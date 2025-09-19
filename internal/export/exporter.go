@@ -139,8 +139,12 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 	}
 	fmt.Fprintln(bw)
 
+	allowedSet := make(map[string]struct{}, len(filtered))
+	for _, t := range filtered {
+		allowedSet[t] = struct{}{}
+	}
 	for _, tbl := range filtered {
-		if err := exportTableConstraints(ctx, pool, tbl, bw); err != nil {
+		if err := exportTableConstraints(ctx, pool, tbl, allowedSet, bw); err != nil {
 			return fmt.Errorf("export constraints for %s: %w", tbl, err)
 		}
 	}
@@ -214,7 +218,7 @@ ORDER BY sequence_name, table_name, column_name`
 	}
 	return nil
 }
-func exportTableConstraints(ctx context.Context, pool *pgxpool.Pool, table string, w io.Writer) error {
+func exportTableConstraints(ctx context.Context, pool *pgxpool.Pool, table string, allowed map[string]struct{}, w io.Writer) error {
 	q := `
 		SELECT c.conname,
 		       pg_get_constraintdef(c.oid, true) AS def,
@@ -241,7 +245,7 @@ func exportTableConstraints(ctx context.Context, pool *pgxpool.Pool, table strin
 			if refSchema != "public" {
 				continue
 			}
-			if !includeTables[refTable] || excludeTables[refTable] {
+			if _, ok := allowed[refTable]; !ok {
 				continue
 			}
 		}
