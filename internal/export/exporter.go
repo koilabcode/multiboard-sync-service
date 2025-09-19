@@ -164,7 +164,7 @@ WITH cols AS (
 ),
 seqs AS (
 	SELECT
-		regexp_replace(regexp_replace(default_expr, E'.*nextval\\(\\'' , ''), E'\\'::regclass\\).*', '') AS sequence_name,
+		substring(default_expr from $$nextval\('([^']+)'::regclass\)$$) AS sequence_name,
 		table_name,
 		column_name
 	FROM cols
