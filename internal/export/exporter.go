@@ -76,7 +76,7 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 	bw := bufio.NewWriterSize(w, 1024*256)
 	defer bw.Flush()
 
-	fmt.Fprintf(bw, "-- Multiboard SQL export\n-- Database: %s\n-- Generated: %s\n\n", dbName, time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(bw, "-- Multiboard SQL export (v2)\n-- Database: %s\n-- Generated: %s\n\n", dbName, time.Now().UTC().Format(time.RFC3339))
 
 	tables, err := listPublicTables(ctx, pool)
 	if err != nil {
