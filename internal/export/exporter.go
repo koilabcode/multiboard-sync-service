@@ -25,6 +25,29 @@ type Exporter struct {
 func New(mgr *database.Manager) *Exporter {
 	return &Exporter{mgr: mgr}
 }
+func exportSequences(ctx context.Context, w io.Writer, pool *pgxpool.Pool) error {
+	fmt.Fprintln(w, "-- Sequences")
+	q := `
+		SELECT c.relname AS sequence_name
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind = 'S' AND n.nspname = 'public'
+		ORDER BY c.relname`
+	rows, err := pool.Query(ctx, q)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq string
+		if err := rows.Scan(&seq); err != nil {
+			continue
+		}
+		fmt.Fprintf(w, "CREATE SEQUENCE IF NOT EXISTS %s;\n", quoteIdent(seq))
+	}
+	return rows.Err()
+}
+
 
 var includeTables = map[string]bool{
 	"Part":           true,
@@ -56,6 +79,11 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 
 	fmt.Fprintf(bw, "-- Multiboard SQL export\n-- Database: %s\n-- Generated: %s\n\n", dbName, time.Now().UTC().Format(time.RFC3339))
 
+	if err := exportSequences(ctx, bw, pool); err != nil {
+		return err
+	}
+	fmt.Fprintln(bw)
+
 	tables, err := listPublicTables(ctx, pool)
 	if err != nil {
 		return err
@@ -70,17 +98,20 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 		}
 	}
 	sort.Strings(filtered)
-
 	total := len(filtered)
+
+	for _, tbl := range filtered {
+		if err := writeCreateTable(ctx, pool, bw, tbl); err != nil {
+			return fmt.Errorf("create table for %s: %w", tbl, err)
+		}
+	}
+	fmt.Fprintln(bw)
+
 	for i, tbl := range filtered {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-		}
-
-		if err := writeCreateTable(ctx, pool, bw, tbl); err != nil {
-			return fmt.Errorf("create table for %s: %w", tbl, err)
 		}
 		rows, err := streamInserts(ctx, pool, bw, tbl, func(rowsExported int64) {
 			if progress != nil {
@@ -93,10 +124,109 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 		if progress != nil {
 			progress(i+1, total, tbl, rows)
 		}
-		fmt.Fprintln(bw)
 	}
+	fmt.Fprintln(bw)
+
+	if err := exportSequenceUpdates(ctx, bw, pool); err != nil {
+		return err
+	}
+	fmt.Fprintln(bw)
+
+	for _, tbl := range filtered {
+		if err := exportIndexes(ctx, pool, tbl, bw); err != nil {
+			return fmt.Errorf("indexes for %s: %w", tbl, err)
+		}
+	}
+	fmt.Fprintln(bw)
+
+	for _, tbl := range filtered {
+		if err := exportTableConstraints(ctx, pool, tbl, bw); err != nil {
+			return fmt.Errorf("constraints for %s: %w", tbl, err)
+		}
+	}
+
 	return bw.Flush()
 }
+func exportSequenceUpdates(ctx context.Context, w io.Writer, pool *pgxpool.Pool) error {
+	fmt.Fprintln(w, "-- Sequence ownership and values")
+	q := `
+WITH cols AS (
+	SELECT
+		n.nspname,
+		c.relname AS table_name,
+		a.attname AS column_name,
+		pg_get_expr(ad.adbin, ad.adrelid) AS default_expr
+	FROM pg_attribute a
+	JOIN pg_class c ON c.oid = a.attrelid
+	JOIN pg_namespace n ON n.oid = c.relnamespace
+	LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
+	WHERE n.nspname = 'public' AND a.attnum > 0 AND NOT a.attisdropped
+),
+seqs AS (
+	SELECT
+		regexp_replace(regexp_replace(default_expr, E'.*nextval\\(\\'' , ''), E'\\'::regclass\\).*', '') AS sequence_name,
+		table_name,
+		column_name
+	FROM cols
+	WHERE default_expr LIKE 'nextval(%'
+)
+SELECT DISTINCT sequence_name, table_name, column_name
+FROM seqs
+WHERE sequence_name IS NOT NULL AND sequence_name <> ''
+ORDER BY sequence_name, table_name, column_name`
+	rows, err := pool.Query(ctx, q)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type own struct{ seq, tbl, col string }
+	var owns []own
+	for rows.Next() {
+		var o own
+		if err := rows.Scan(&o.seq, &o.tbl, &o.col); err == nil {
+			owns = append(owns, o)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, o := range owns {
+		fmt.Fprintf(w, "ALTER SEQUENCE %s OWNED BY %s.%s;\n", quoteIdent(o.seq), quoteIdent(o.tbl), quoteIdent(o.col))
+	}
+	for _, o := range owns {
+		sql := fmt.Sprintf(`SELECT COALESCE(MAX(%s), 0) FROM %s`, quoteIdent(o.col), quoteIdent(o.tbl))
+		var maxVal int64
+		if err := pool.QueryRow(ctx, sql).Scan(&maxVal); err != nil {
+			continue
+		}
+		fmt.Fprintf(w, "SELECT setval('%s', %d, %t);\n", o.seq, maxVal, maxVal > 0)
+	}
+	return nil
+}
+func exportTableConstraints(ctx context.Context, pool *pgxpool.Pool, table string, w io.Writer) error {
+	q := `
+		SELECT conname, pg_get_constraintdef(c.oid, true)
+		FROM pg_constraint c
+		JOIN pg_class t ON t.oid = c.conrelid
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		WHERE n.nspname='public' AND t.relname=$1 AND c.contype IN ('f')
+		ORDER BY conname`
+	rows, err := pool.Query(ctx, q, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name, def string
+		if err := rows.Scan(&name, &def); err != nil {
+			continue
+		}
+		fmt.Fprintf(w, "ALTER TABLE %s ADD CONSTRAINT %s %s;\n", quoteIdent(table), quoteIdent(name), def)
+	}
+	return rows.Err()
+}
+
+
 
 func (e *Exporter) Pool(ctx context.Context, name string) (*pgxpool.Pool, error) {
 	return e.mgr.Pool(ctx, name)
@@ -193,6 +323,27 @@ order by c.ordinal_position`
 	return out, rows.Err()
 }
 
+func exportIndexes(ctx context.Context, pool *pgxpool.Pool, table string, w io.Writer) error {
+	q := `
+		SELECT indexdef
+		FROM pg_indexes
+		WHERE schemaname='public' AND tablename=$1
+		ORDER BY indexname`
+	rows, err := pool.Query(ctx, q, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var def string
+		if err := rows.Scan(&def); err != nil {
+			continue
+		}
+		fmt.Fprintln(w, def+";")
+	}
+	return rows.Err()
+}
+
 func streamInserts(ctx context.Context, pool *pgxpool.Pool, w *bufio.Writer, table string, onBatch func(rowsExported int64)) (int64, error) {
 	cols, err := getColumns(ctx, pool, table)
 	if err != nil {
@@ -229,6 +380,7 @@ func streamInserts(ctx context.Context, pool *pgxpool.Pool, w *bufio.Writer, tab
 		valBuf = append(valBuf, tupleToSQL(values))
 		batchCnt++
 		totalRows++
+
 
 		if batchCnt >= batchSize {
 			if err := writeInsert(w, table, colNames, valBuf); err != nil {
