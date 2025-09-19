@@ -35,7 +35,7 @@ func exportSequences(ctx context.Context, w io.Writer, pool *pgxpool.Pool) error
 		ORDER BY c.relname`
 	rows, err := pool.Query(ctx, q)
 	if err != nil {
-		return err
+		return fmt.Errorf("exportSequences query: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -176,7 +176,7 @@ WHERE sequence_name IS NOT NULL AND sequence_name <> ''
 ORDER BY sequence_name, table_name, column_name`
 	rows, err := pool.Query(ctx, q)
 	if err != nil {
-		return err
+		return fmt.Errorf("exportSequenceUpdates query: %w", err)
 	}
 	defer rows.Close()
 	type own struct{ seq, tbl, col string }
