@@ -127,7 +127,7 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 	}
 	fmt.Fprintln(bw)
 
-	if err := exportSequenceUpdates(ctx, bw, pool); err != nil {
+	if err := exportSequenceUpdates(ctx, bw, pool, filtered); err != nil {
 		return fmt.Errorf("export sequence updates: %w", err)
 	}
 	fmt.Fprintln(bw)
@@ -147,7 +147,12 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 
 	return bw.Flush()
 }
-func exportSequenceUpdates(ctx context.Context, w io.Writer, pool *pgxpool.Pool) error {
+func containsAllowed(allowed map[string]struct{}, tbl string) bool {
+	_, ok := allowed[tbl]
+	return ok
+}
+
+func exportSequenceUpdates(ctx context.Context, w io.Writer, pool *pgxpool.Pool, allowedTables []string) error {
 	fmt.Fprintln(w, "-- Sequence ownership and values")
 	q := `
 WITH cols AS (
@@ -180,11 +185,17 @@ ORDER BY sequence_name, table_name, column_name`
 	}
 	defer rows.Close()
 	type own struct{ seq, tbl, col string }
+	allowed := make(map[string]struct{}, len(allowedTables))
+	for _, t := range allowedTables {
+		allowed[t] = struct{}{}
+	}
 	var owns []own
 	for rows.Next() {
 		var o own
 		if err := rows.Scan(&o.seq, &o.tbl, &o.col); err == nil {
-			owns = append(owns, o)
+			if _, ok := allowed[o.tbl]; ok {
+				owns = append(owns, o)
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
