@@ -102,7 +102,28 @@
           if (j.status === 'completed') li.classList.add('status-completed');
           else if (j.status === 'failed') li.classList.add('status-failed');
           else li.classList.add('status-running');
-          li.textContent = `${j.id} [${j.database}] - ${j.status} - ${j.progress}%`;
+
+          const title = document.createElement('div');
+          title.textContent = `${j.id} [${j.database}] - ${j.status}`;
+          title.style.marginBottom = '6px';
+          li.appendChild(title);
+
+          const container = document.createElement('div');
+          container.className = 'progress-container';
+
+          const bar = document.createElement('div');
+          bar.className = 'progress-bar' + (j.status === 'completed' ? ' completed' : '');
+          const pct = Math.max(0, Math.min(100, Number(j.progress || 0)));
+          bar.style.width = pct + '%';
+
+          const text = document.createElement('span');
+          text.className = 'progress-text';
+          text.textContent = pct + '%';
+
+          bar.appendChild(text);
+          container.appendChild(bar);
+          li.appendChild(container);
+
           list.appendChild(li);
         });
         el.appendChild(list);
@@ -128,14 +149,48 @@
         const data = await res.json();
         const jobId = data.jobId;
         const progressEl = document.getElementById('sync-progress');
-        progressEl.textContent = 'Queued (job ' + jobId + ')';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'sync-progress job-item status-running';
+
+        const title = document.createElement('div');
+        title.textContent = 'Queued (job ' + jobId + ')';
+        title.style.marginBottom = '6px';
+        wrapper.appendChild(title);
+
+        const container = document.createElement('div');
+        container.className = 'progress-container';
+
+        const bar = document.createElement('div');
+        bar.className = 'progress-bar';
+        bar.style.width = '0%';
+
+        const text = document.createElement('span');
+        text.className = 'progress-text';
+        text.textContent = '0%';
+
+        bar.appendChild(text);
+        container.appendChild(bar);
+        wrapper.appendChild(container);
+
+        progressEl.innerHTML = '';
+        progressEl.appendChild(wrapper);
+
         const interval = setInterval(async () => {
           try {
             const jr = await fetch('/api/jobs/' + jobId);
             if (!jr.ok) return;
             const j = await jr.json();
-            progressEl.className = 'sync-progress job-item ' + (j.status === 'completed' ? 'status-completed' : (j.status === 'failed' ? 'status-failed' : 'status-running'));
-            progressEl.textContent = `Job ${j.id} [${j.database}] - ${j.status} - ${j.progress}%`;
+
+            wrapper.className = 'sync-progress job-item ' + (j.status === 'completed' ? 'status-completed' : (j.status === 'failed' ? 'status-failed' : 'status-running'));
+            title.textContent = `Job ${j.id} [${j.database}] - ${j.status}`;
+            const pct = Math.max(0, Math.min(100, Number(j.progress || 0)));
+            bar.style.width = pct + '%';
+            if (j.status === 'completed') {
+              bar.classList.add('completed');
+            }
+            text.textContent = pct + '%';
+
             if (j.status === 'completed' || j.status === 'failed') {
               clearInterval(interval);
             }
