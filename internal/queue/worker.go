@@ -158,7 +158,11 @@ func (w *Worker) performImport(ctx context.Context, target, jobID, dumpPath stri
 				stmtBuf.Reset()
 				if stmt != "" {
 					if _, errExec := pool.Exec(ctx, stmt); errExec != nil {
-						return fmt.Errorf("exec failed: %w", errExec)
+						max := 500
+						if len(stmt) < max {
+							max = len(stmt)
+						}
+						return fmt.Errorf("exec failed: %w; stmt: %s", errExec, strings.TrimSpace(stmt[:max]))
 					}
 				}
 			}
