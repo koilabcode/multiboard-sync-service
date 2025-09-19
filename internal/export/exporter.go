@@ -80,13 +80,13 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 	fmt.Fprintf(bw, "-- Multiboard SQL export\n-- Database: %s\n-- Generated: %s\n\n", dbName, time.Now().UTC().Format(time.RFC3339))
 
 	if err := exportSequences(ctx, bw, pool); err != nil {
-		return err
+		return fmt.Errorf("export sequences: %w", err)
 	}
 	fmt.Fprintln(bw)
 
 	tables, err := listPublicTables(ctx, pool)
 	if err != nil {
-		return err
+		return fmt.Errorf("list public tables: %w", err)
 	}
 	filtered := make([]string, 0, len(tables))
 	for _, t := range tables {
@@ -128,20 +128,20 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 	fmt.Fprintln(bw)
 
 	if err := exportSequenceUpdates(ctx, bw, pool); err != nil {
-		return err
+		return fmt.Errorf("export sequence updates: %w", err)
 	}
 	fmt.Fprintln(bw)
 
 	for _, tbl := range filtered {
 		if err := exportIndexes(ctx, pool, tbl, bw); err != nil {
-			return fmt.Errorf("indexes for %s: %w", tbl, err)
+			return fmt.Errorf("export indexes for %s: %w", tbl, err)
 		}
 	}
 	fmt.Fprintln(bw)
 
 	for _, tbl := range filtered {
 		if err := exportTableConstraints(ctx, pool, tbl, bw); err != nil {
-			return fmt.Errorf("constraints for %s: %w", tbl, err)
+			return fmt.Errorf("export constraints for %s: %w", tbl, err)
 		}
 	}
 
