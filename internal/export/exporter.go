@@ -210,8 +210,7 @@ ORDER BY sequence_name, table_name, column_name`
 		if err := pool.QueryRow(ctx, sql).Scan(&maxVal); err != nil {
 			continue
 		}
-		seqIdent := `"` + strings.ReplaceAll(o.seq, `"`, `""`) + `"`
-		fmt.Fprintf(w, "SELECT setval('%s'::regclass, %d, %t);\n", seqIdent, maxVal, maxVal > 0)
+		fmt.Fprintf(w, "SELECT setval('%s'::regclass, %d, %t);\n", o.seq, maxVal, maxVal > 0)
 	}
 	return nil
 }
