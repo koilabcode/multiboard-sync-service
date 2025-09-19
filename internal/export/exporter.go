@@ -216,21 +216,34 @@ ORDER BY sequence_name, table_name, column_name`
 }
 func exportTableConstraints(ctx context.Context, pool *pgxpool.Pool, table string, w io.Writer) error {
 	q := `
-		SELECT conname, pg_get_constraintdef(c.oid, true)
+		SELECT c.conname,
+		       pg_get_constraintdef(c.oid, true) AS def,
+		       rt.relname AS ref_table,
+		       rn.nspname AS ref_schema
 		FROM pg_constraint c
 		JOIN pg_class t ON t.oid = c.conrelid
 		JOIN pg_namespace n ON n.oid = t.relnamespace
+		LEFT JOIN pg_class rt ON rt.oid = c.confrelid
+		LEFT JOIN pg_namespace rn ON rn.oid = rt.relnamespace
 		WHERE n.nspname='public' AND t.relname=$1 AND c.contype IN ('f')
-		ORDER BY conname`
+		ORDER BY c.conname`
 	rows, err := pool.Query(ctx, q, table)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var name, def string
-		if err := rows.Scan(&name, &def); err != nil {
+		var name, def, refTable, refSchema string
+		if err := rows.Scan(&name, &def, &refTable, &refSchema); err != nil {
 			continue
+		}
+		if refTable != "" {
+			if refSchema != "public" {
+				continue
+			}
+			if !includeTables[refTable] || excludeTables[refTable] {
+				continue
+			}
 		}
 		fmt.Fprintf(w, "ALTER TABLE %s ADD CONSTRAINT %s %s;\n", quoteIdent(table), quoteIdent(name), def)
 	}
