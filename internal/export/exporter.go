@@ -202,7 +202,7 @@ ORDER BY sequence_name, table_name, column_name`
 		return err
 	}
 	for _, o := range owns {
-		fmt.Fprintf(w, "ALTER SEQUENCE %s OWNED BY %s.%s;\n", quoteIdent(o.seq), quoteIdent(o.tbl), quoteIdent(o.col))
+		_ = o
 	}
 	for _, o := range owns {
 		sql := fmt.Sprintf(`SELECT COALESCE(MAX(%s), 0) FROM %s`, quoteIdent(o.col), quoteIdent(o.tbl))
