@@ -34,6 +34,23 @@
     <div id="jobs"></div>
   </div>
 
+  <div class="section">
+    <h2>Database Sync</h2>
+    <label>Source:
+      <select id="source">
+        <option value="dev">Dev</option>
+        <option value="staging">Staging</option>
+      </select>
+    </label>
+    <label>Target:
+      <select id="target">
+        <option value="localhost">Localhost</option>
+      </select>
+    </label>
+    <button onclick="syncDB()">Start Sync</button>
+    <div id="sync-progress"></div>
+  </div>
+
   <script>
     async function listDatabases() {
       const resp = await fetch('/api/databases');
@@ -86,6 +103,43 @@
         el.appendChild(list);
       } catch (e) {
         console.error(e);
+      }
+    }
+
+    async function syncDB() {
+      const source = document.getElementById('source').value;
+      const target = document.getElementById('target').value;
+      try {
+        const res = await fetch('/api/sync/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, target })
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          alert('Failed: ' + t);
+          return;
+        }
+        const data = await res.json();
+        const jobId = data.jobId;
+        const progressEl = document.getElementById('sync-progress');
+        progressEl.textContent = 'Queued (job ' + jobId + ')';
+        const interval = setInterval(async () => {
+          try {
+            const jr = await fetch('/api/jobs/' + jobId);
+            if (!jr.ok) return;
+            const j = await jr.json();
+            progressEl.textContent = `Job ${j.id} [${j.database}] - ${j.status} - ${j.progress}%`;
+            if (j.status === 'completed' || j.status === 'failed') {
+              clearInterval(interval);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }, 1000);
+        refreshJobs();
+      } catch (e) {
+        alert('Error: ' + e.message);
       }
     }
 

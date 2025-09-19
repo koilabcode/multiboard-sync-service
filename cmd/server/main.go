@@ -65,6 +65,16 @@ func main() {
 		}
 		eh.StartExport(w, r)
 	})
+
+	ih := &handlers.ImportHandler{Jobs: jobs, Client: client}
+	mux.HandleFunc("/api/sync/import", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ih.StartImport(w, r)
+	})
+
 	mux.HandleFunc("/api/jobs", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
