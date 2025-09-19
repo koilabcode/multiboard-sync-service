@@ -69,7 +69,7 @@ func (w *Worker) performExport(ctx context.Context, db string, jobID string) err
 
 	_, _ = f.WriteString(fmt.Sprintf("-- Export started at %s\n\n", time.Now().UTC().Format(time.RFC3339)))
 	if err := w.exporter.Export(ctx, db, f, progFn); err != nil {
-		return err
+		return fmt.Errorf("exporter.Export db=%s: %w", db, err)
 	}
 	w.jobs.Update(jobID, func(j *models.Job) {
 		j.Progress = 100
@@ -158,7 +158,11 @@ func (w *Worker) performImport(ctx context.Context, target, jobID, dumpPath stri
 				stmtBuf.Reset()
 				if stmt != "" {
 					if _, errExec := pool.Exec(ctx, stmt); errExec != nil {
-						return fmt.Errorf("exec failed: %w", errExec)
+						max := 500
+						if len(stmt) < max {
+							max = len(stmt)
+						}
+						return fmt.Errorf("exec failed: %w; stmt: %s", errExec, strings.TrimSpace(stmt[:max]))
 					}
 				}
 			}

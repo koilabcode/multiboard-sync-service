@@ -35,7 +35,7 @@ func exportSequences(ctx context.Context, w io.Writer, pool *pgxpool.Pool) error
 		ORDER BY c.relname`
 	rows, err := pool.Query(ctx, q)
 	if err != nil {
-		return err
+		return fmt.Errorf("exportSequences query: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -78,15 +78,10 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 	defer bw.Flush()
 
 	fmt.Fprintf(bw, "-- Multiboard SQL export\n-- Database: %s\n-- Generated: %s\n\n", dbName, time.Now().UTC().Format(time.RFC3339))
-
-	if err := exportSequences(ctx, bw, pool); err != nil {
-		return err
-	}
-	fmt.Fprintln(bw)
-
+ 
 	tables, err := listPublicTables(ctx, pool)
 	if err != nil {
-		return err
+		return fmt.Errorf("list public tables: %w", err)
 	}
 	filtered := make([]string, 0, len(tables))
 	for _, t := range tables {
@@ -106,6 +101,11 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 		}
 	}
 	fmt.Fprintln(bw)
+	if err := exportSequences(ctx, bw, pool); err != nil {
+		return fmt.Errorf("export sequences after tables: %w", err)
+	}
+	fmt.Fprintln(bw)
+
 
 	for i, tbl := range filtered {
 		select {
@@ -127,27 +127,36 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 	}
 	fmt.Fprintln(bw)
 
-	if err := exportSequenceUpdates(ctx, bw, pool); err != nil {
-		return err
+	if err := exportSequenceUpdates(ctx, bw, pool, filtered); err != nil {
+		return fmt.Errorf("export sequence updates: %w", err)
 	}
 	fmt.Fprintln(bw)
 
 	for _, tbl := range filtered {
 		if err := exportIndexes(ctx, pool, tbl, bw); err != nil {
-			return fmt.Errorf("indexes for %s: %w", tbl, err)
+			return fmt.Errorf("export indexes for %s: %w", tbl, err)
 		}
 	}
 	fmt.Fprintln(bw)
 
+	allowedSet := make(map[string]struct{}, len(filtered))
+	for _, t := range filtered {
+		allowedSet[t] = struct{}{}
+	}
 	for _, tbl := range filtered {
-		if err := exportTableConstraints(ctx, pool, tbl, bw); err != nil {
-			return fmt.Errorf("constraints for %s: %w", tbl, err)
+		if err := exportTableConstraints(ctx, pool, tbl, allowedSet, bw); err != nil {
+			return fmt.Errorf("export constraints for %s: %w", tbl, err)
 		}
 	}
 
 	return bw.Flush()
 }
-func exportSequenceUpdates(ctx context.Context, w io.Writer, pool *pgxpool.Pool) error {
+func containsAllowed(allowed map[string]struct{}, tbl string) bool {
+	_, ok := allowed[tbl]
+	return ok
+}
+
+func exportSequenceUpdates(ctx context.Context, w io.Writer, pool *pgxpool.Pool, allowedTables []string) error {
 	fmt.Fprintln(w, "-- Sequence ownership and values")
 	q := `
 WITH cols AS (
@@ -164,7 +173,7 @@ WITH cols AS (
 ),
 seqs AS (
 	SELECT
-		regexp_replace(regexp_replace(default_expr, E'.*nextval\\(\\'' , ''), E'\\'::regclass\\).*', '') AS sequence_name,
+		substring(default_expr from $$nextval\('([^']+)'::regclass\)$$) AS sequence_name,
 		table_name,
 		column_name
 	FROM cols
@@ -176,22 +185,28 @@ WHERE sequence_name IS NOT NULL AND sequence_name <> ''
 ORDER BY sequence_name, table_name, column_name`
 	rows, err := pool.Query(ctx, q)
 	if err != nil {
-		return err
+		return fmt.Errorf("exportSequenceUpdates query: %w", err)
 	}
 	defer rows.Close()
 	type own struct{ seq, tbl, col string }
+	allowed := make(map[string]struct{}, len(allowedTables))
+	for _, t := range allowedTables {
+		allowed[t] = struct{}{}
+	}
 	var owns []own
 	for rows.Next() {
 		var o own
 		if err := rows.Scan(&o.seq, &o.tbl, &o.col); err == nil {
-			owns = append(owns, o)
+			if _, ok := allowed[o.tbl]; ok {
+				owns = append(owns, o)
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 	for _, o := range owns {
-		fmt.Fprintf(w, "ALTER SEQUENCE %s OWNED BY %s.%s;\n", quoteIdent(o.seq), quoteIdent(o.tbl), quoteIdent(o.col))
+		_ = o
 	}
 	for _, o := range owns {
 		sql := fmt.Sprintf(`SELECT COALESCE(MAX(%s), 0) FROM %s`, quoteIdent(o.col), quoteIdent(o.tbl))
@@ -199,27 +214,40 @@ ORDER BY sequence_name, table_name, column_name`
 		if err := pool.QueryRow(ctx, sql).Scan(&maxVal); err != nil {
 			continue
 		}
-		fmt.Fprintf(w, "SELECT setval('%s', %d, %t);\n", o.seq, maxVal, maxVal > 0)
+		fmt.Fprintf(w, "SELECT setval('%s'::regclass, %d, %t);\n", o.seq, maxVal, maxVal > 0)
 	}
 	return nil
 }
-func exportTableConstraints(ctx context.Context, pool *pgxpool.Pool, table string, w io.Writer) error {
+func exportTableConstraints(ctx context.Context, pool *pgxpool.Pool, table string, allowed map[string]struct{}, w io.Writer) error {
 	q := `
-		SELECT conname, pg_get_constraintdef(c.oid, true)
+		SELECT c.conname,
+		       pg_get_constraintdef(c.oid, true) AS def,
+		       rt.relname AS ref_table,
+		       rn.nspname AS ref_schema
 		FROM pg_constraint c
 		JOIN pg_class t ON t.oid = c.conrelid
 		JOIN pg_namespace n ON n.oid = t.relnamespace
+		LEFT JOIN pg_class rt ON rt.oid = c.confrelid
+		LEFT JOIN pg_namespace rn ON rn.oid = rt.relnamespace
 		WHERE n.nspname='public' AND t.relname=$1 AND c.contype IN ('f')
-		ORDER BY conname`
+		ORDER BY c.conname`
 	rows, err := pool.Query(ctx, q, table)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var name, def string
-		if err := rows.Scan(&name, &def); err != nil {
+		var name, def, refTable, refSchema string
+		if err := rows.Scan(&name, &def, &refTable, &refSchema); err != nil {
 			continue
+		}
+		if refTable != "" {
+			if refSchema != "public" {
+				continue
+			}
+			if _, ok := allowed[refTable]; !ok {
+				continue
+			}
 		}
 		fmt.Fprintf(w, "ALTER TABLE %s ADD CONSTRAINT %s %s;\n", quoteIdent(table), quoteIdent(name), def)
 	}

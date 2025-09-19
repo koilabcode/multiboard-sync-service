@@ -1,0 +1,129 @@
+/* Base layout */
+body {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: #f3f4f6;
+  color: #0f172a;
+  margin: 0;
+  padding: 24px;
+}
+
+.header {
+  max-width: 960px;
+  margin: 0 auto 16px auto;
+  padding: 8px 8px 0;
+}
+
+.header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  color: #0f172a;
+}
+
+/* Card containers */
+.container {
+  max-width: 960px;
+  margin: 16px auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.results pre {
+  background: #f6f8fa;
+  padding: 12px;
+  border-radius: 8px;
+  overflow: auto;
+}
+
+/* Buttons */
+.btn, button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 140px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, transform 60ms ease, box-shadow 120ms ease;
+}
+
+button:hover, .btn:hover {
+  background: #1d4ed8;
+  box-shadow: 0 2px 8px rgba(29,78,216,0.2);
+}
+
+button:active, .btn:active {
+  transform: translateY(1px);
+}
+
+/* Layout helpers */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+label select {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  padding: 0 8px;
+  background: #fff;
+}
+
+/* Jobs list */
+.jobs ul {
+  padding-left: 1.1rem;
+  margin: 0;
+}
+
+.job-item {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fafafa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+}
+
+/* Status colors */
+.status-completed {
+  border-color: #22c55e;
+  background: #ecfdf5;
+  color: #14532d;
+}
+
+.status-failed {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+
+.status-running {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+/* Sync progress */
+.sync-progress {
+  margin-top: 8px;
+}

@@ -3,52 +3,53 @@
 <head>
   <meta charset="utf-8" />
   <title>Multiboard Sync Service</title>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; }
-    button { padding: 10px 16px; margin: 6px; cursor: pointer; }
-    ul { padding-left: 1.2rem; }
-    li { margin: 0.25rem 0; }
-    .section { margin-bottom: 28px; }
-    pre { background: #f6f8fa; padding: 12px; border-radius: 6px; }
-  </style>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <h1>Multiboard Database Sync Service</h1>
+  <header class="header">
+    <h1>Multiboard Database Sync Service</h1>
+  </header>
 
-  <div class="section">
+  <div class="container">
     <h2>Database Utilities</h2>
-    <button onclick="listDatabases()">List Databases</button>
-    <button onclick="testConnection('production')">Test Production</button>
-    <button onclick="testConnection('staging')">Test Staging</button>
-    <button onclick="testConnection('dev')">Test Dev</button>
-    <button onclick="testConnection('localhost')">Test Localhost</button>
-    <div id="results"></div>
+    <div class="actions">
+      <button class="btn" onclick="listDatabases()">List Databases</button>
+      <button class="btn" onclick="testConnection('production')">Test Production</button>
+      <button class="btn" onclick="testConnection('staging')">Test Staging</button>
+      <button class="btn" onclick="testConnection('dev')">Test Dev</button>
+      <button class="btn" onclick="testConnection('localhost')">Test Localhost</button>
+    </div>
+    <div id="results" class="results"></div>
   </div>
 
-  <div class="section">
+  <div class="container">
     <h2>Export</h2>
-    <button onclick="startExport('localhost')">Export Localhost</button>
-    <button onclick="startExport('dev')">Export Dev</button>
+    <div class="actions">
+      <button class="btn" onclick="startExport('localhost')">Export Localhost</button>
+      <button class="btn" onclick="startExport('dev')">Export Dev</button>
+    </div>
 
     <h3>Jobs</h3>
-    <div id="jobs"></div>
+    <div id="jobs" class="jobs"></div>
   </div>
 
-  <div class="section">
+  <div class="container">
     <h2>Database Sync</h2>
-    <label>Source:
-      <select id="source">
-        <option value="dev">Dev</option>
-        <option value="staging">Staging</option>
-      </select>
-    </label>
-    <label>Target:
-      <select id="target">
-        <option value="localhost">Localhost</option>
-      </select>
-    </label>
-    <button onclick="syncDB()">Start Sync</button>
-    <div id="sync-progress"></div>
+    <div class="form-row">
+      <label>Source:
+        <select id="source">
+          <option value="dev">Dev</option>
+          <option value="staging">Staging</option>
+        </select>
+      </label>
+      <label>Target:
+        <select id="target">
+          <option value="localhost">Localhost</option>
+        </select>
+      </label>
+      <button class="btn" onclick="syncDB()">Start Sync</button>
+    </div>
+    <div id="sync-progress" class="sync-progress"></div>
   </div>
 
   <script>
@@ -97,6 +98,10 @@
         const list = document.createElement('ul');
         jobs.forEach(j => {
           const li = document.createElement('li');
+          li.classList.add('job-item');
+          if (j.status === 'completed') li.classList.add('status-completed');
+          else if (j.status === 'failed') li.classList.add('status-failed');
+          else li.classList.add('status-running');
           li.textContent = `${j.id} [${j.database}] - ${j.status} - ${j.progress}%`;
           list.appendChild(li);
         });
@@ -129,6 +134,7 @@
             const jr = await fetch('/api/jobs/' + jobId);
             if (!jr.ok) return;
             const j = await jr.json();
+            progressEl.className = 'sync-progress job-item ' + (j.status === 'completed' ? 'status-completed' : (j.status === 'failed' ? 'status-failed' : 'status-running'));
             progressEl.textContent = `Job ${j.id} [${j.database}] - ${j.status} - ${j.progress}%`;
             if (j.status === 'completed' || j.status === 'failed') {
               clearInterval(interval);
