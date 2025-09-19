@@ -47,6 +47,7 @@ This guide shows how to deploy on Ubuntu/Debian with systemd. It assumes a VPS w
 - Ensure Redis is reachable from the service
 - Health: curl http://127.0.0.1:8080/health
 - Static UI should be available at /
+- Note: static files are served via a relative path (cmd/server/static) in the binary; this relies on systemd WorkingDirectory=/opt/multiboard-sync-service so that /opt/multiboard-sync-service/cmd/server/static is found. The deploy script and unit file set this up.
 
 ## Nginx (optional, HTTPS)
 - Install: sudo apt-get update && sudo apt-get install -y nginx certbot python3-certbot-nginx
