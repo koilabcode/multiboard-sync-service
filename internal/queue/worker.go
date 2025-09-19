@@ -69,7 +69,7 @@ func (w *Worker) performExport(ctx context.Context, db string, jobID string) err
 
 	_, _ = f.WriteString(fmt.Sprintf("-- Export started at %s\n\n", time.Now().UTC().Format(time.RFC3339)))
 	if err := w.exporter.Export(ctx, db, f, progFn); err != nil {
-		return err
+		return fmt.Errorf("exporter.Export db=%s: %w", db, err)
 	}
 	w.jobs.Update(jobID, func(j *models.Job) {
 		j.Progress = 100
