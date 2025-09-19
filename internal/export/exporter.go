@@ -78,12 +78,7 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 	defer bw.Flush()
 
 	fmt.Fprintf(bw, "-- Multiboard SQL export\n-- Database: %s\n-- Generated: %s\n\n", dbName, time.Now().UTC().Format(time.RFC3339))
-
-	if err := exportSequences(ctx, bw, pool); err != nil {
-		return fmt.Errorf("export sequences: %w", err)
-	}
-	fmt.Fprintln(bw)
-
+ 
 	tables, err := listPublicTables(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("list public tables: %w", err)
@@ -106,6 +101,11 @@ func (e *Exporter) Export(ctx context.Context, dbName string, w io.Writer, progr
 		}
 	}
 	fmt.Fprintln(bw)
+	if err := exportSequences(ctx, bw, pool); err != nil {
+		return fmt.Errorf("export sequences after tables: %w", err)
+	}
+	fmt.Fprintln(bw)
+
 
 	for i, tbl := range filtered {
 		select {
